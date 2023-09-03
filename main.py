@@ -1,6 +1,7 @@
 import math
 import numpy as np
 import pandas as pd
+import openpyxl
 import matplotlib.pyplot as plt
 import seaborn as sns
 import requests
@@ -167,10 +168,34 @@ def add_time_features(df):
 
 df = add_time_features(df)
 
-summary_df = Summarizer(df)
-new_df = summary_df.find_custom_statistics_C(group_column='DAY_INTERVAL')
+df.to_csv('updated_concatenated_traffic_data.csv')
 
-new_df.value_counts('SEASON')
+#####
+#SUMMARY DATAFRAME WITH NEW FEATURES
+
+df = pd.read_csv('updated_concatenated_traffic_data.csv')
+
+summary_df = Summarizer(df)
+
+
+df_hour = summary_df.find_based_statistics()
+df_day = summary_df.find_custom_statistics(group_column='DAY_NUMBER')
+df_month = summary_df.find_custom_statistics(group_column='MONTH')
+df_season = summary_df.find_custom_statistics(group_column='SEASON')
+df_year = summary_df.find_custom_statistics(group_column='YEAR')
+df_time_interval = summary_df.find_custom_statistics(group_column='TIME_INTERVAL_D')
+df_time_interval.columns = ['GEOHASH', 'TIME_INTERVAL_D', 'AVG_TIME_INTERVAL', 'SUM_TIME_INTERVAL']
+
+final_df = df_hour.merge(df_day, on = 'GEOHASH').merge(df_month, on = 'GEOHASH').merge(df_season, on = 'GEOHASH').merge(df_time_interval, on = 'GEOHASH')
+
+###################################################################################################
+###################################################################################################
+###################################################################################################
+
+# TODO: Model kurulacak.
+
+
+
 
 ###################################################################################################
 ###################################################################################################
@@ -193,24 +218,40 @@ def find_missing_data_days(start_date, end_date, date_column):
 ###################################################################################################
 ###################################################################################################
 
+df_hotel = pd.read_excel('OTEL_SON.xlsx')
+df_tourism = pd.read_csv("sightseeing_places_ISTANBUL.csv")
+df_health = pd.read_excel("saglikguncel.xlsx")
+df_autopark = pd.read_excel("otopark.xlsx")
+df_fuelstation = pd.read_csv("fuel_station1.csv")
+df_park = pd.read_csv("guncellenmis_park.csv")
 
-df_park = pd.read_csv('sightseeing_places_ISTANBUL.csv')
 
+def find_lon_lan_dataframe(df):
 
-latitude = df_park["LATITUDE"]
-longitude = df_park["LONGITUDE"]
+    latitude = df["LATITUDE"]
+    longitude = df["LONGITUDE"]
 
-df_park["LATITUDE"] = df_park["LATITUDE"].astype(float)
-df_park["LONGITUDE"] = df_park["LONGITUDE"].astype(float)
+    df["LATITUDE"] = df["LATITUDE"].astype(float)
+    df["LONGITUDE"] = df["LONGITUDE"].astype(float)
 
-df_park["GEOHASH"] = ""
-for index, row in df_park.iterrows():
-    latitude = row["LATITUDE"]
-    longitude = row["LONGITUDE"]
-    geohash_code = geohash2.encode(latitude, longitude)
-    df_park.at[index, "GEOHASH"] = geohash_code
+    df["GEOHASH"] = ""
+    for index, row in df.iterrows():
+        latitude = row["LATITUDE"]
+        longitude = row["LONGITUDE"]
+        geohash_code = geohash2.encode(latitude, longitude)
+        df.at[index, "GEOHASH"] = geohash_code
 
-print(df_park["GEOHASH"])
+    return df
+
+df_hotel = find_lon_lan_dataframe(df_hotel)
+df_tourism = find_lon_lan_dataframe(df_tourism)
+df_health = find_lon_lan_dataframe(df_health)
+df_autopark = find_lon_lan_dataframe(df_autopark)
+
+df_fuelstation.columns = ['NAME', 'LATITUDE', 'LONGITUDE', 'NEIGHBORHOOD_NAME']
+
+df_fuelstation = find_lon_lan_dataframe(df_fuelstation)
+df_park = find_lon_lan_dataframe(df_park)
 
 
 def haversine(lat1, lon1, lat2, lon2):
@@ -231,34 +272,80 @@ def haversine(lat1, lon1, lat2, lon2):
 
     return R * c
 
-turistik_geohash_list = df_park["GEOHASH"].tolist()
-trafik_geohash_list = ds["GEOHASH"].tolist()
+def geohash_to_list(df1, final_df):
 
-def count_tourist_places_near_traffic(trafik_geohash_list, turistik_geohash_list):
+    df1_geohash_list = df1["GEOHASH"].tolist()
+    final_geohash_list = final_df["GEOHASH"].tolist()
+
+    return df1_geohash_list, final_geohash_list
+
+hotel_g_list, final_g_list = geohash_to_list(df_hotel, final_df)
+tourism_g_list, final_g_list = geohash_to_list(df_tourism, final_df)
+health_g_list, final_g_list = geohash_to_list(df_health, final_df)
+autopark_g_list, final_g_list = geohash_to_list(df_autopark, final_df)
+fuelstation_g_list, final_g_list = geohash_to_list(df_fuelstation, final_df)
+park_g_list, final_g_list = geohash_to_list(df_park, final_df)
+
+
+
+unique_list = []
+
+def unique(list1):
+    # initialize a null list
+
+    # traverse for all elements
+    for x in list1:
+        # check if exists in unique_list or not
+        if x not in unique_list:
+            unique_list.append(x)
+
+unique(y)
+
+def count_places_near_traffic(final_g_list, place_g_list):
     result = {}
 
-    for trafik in trafik_geohash_list:
+    for i in final_g_list:
         count = 0
-        lat1, lon1 = geohash2.decode(trafik)
+        lat1, lon1 = geohash2.decode(i)
 
-        for turistik in turistik_geohash_list:
-            lat2, lon2 = geohash2.decode(turistik)
+        for place in place_g_list:
+            lat2, lon2 = geohash2.decode(place)
 
             if haversine(lat1, lon1, lat2, lon2) <= 20:
                 count += 1
 
-        result[trafik] = count
+        result[i] = count
 
     return result
 
 
-sonuclar = count_tourist_places_near_traffic(trafik_geohash_list, turistik_geohash_list)
-sonuclar_df = pd.DataFrame(list(sonuclar.items()), columns=["GEOHASH", "T_COUNT"])
-trafik_df = pd.merge(ds, sonuclar_df, on="GEOHASH", how="left")
+hotel_result = count_places_near_traffic(unique_list, hotel_g_list)
+tourism_result = count_places_near_traffic(unique_list, tourism_g_list)
+health_result = count_places_near_traffic(unique_list, health_g_list)
+autopark_result = count_places_near_traffic(unique_list, autopark_g_list)
+fuelstation_result = count_places_near_traffic(unique_list, fuelstation_g_list)
+park_result = count_places_near_traffic(unique_list, park_g_list)
 
-trafik_df.sort_values(by='T_COUNT', ascending=False)
+hotel_result_df = pd.DataFrame(list(hotel_result.items()), columns=["GEOHASH", "HOTEL_COUNT"])
+tourism_result_df = pd.DataFrame(list(tourism_result.items()), columns=["GEOHASH", "TOURISM_COUNT"])
+health_result_df = pd.DataFrame(list(health_result.items()), columns=["GEOHASH", "HEALTH_COUNT"])
+autopark_result_df = pd.DataFrame(list(autopark_result.items()), columns=["GEOHASH", "AUTOPARK_COUNT"])
+fuelstation_result_df = pd.DataFrame(list(fuelstation_result.items()), columns=["GEOHASH", "FUELSTATION_COUNT"])
+park_result_df = pd.DataFrame(list(park_result.items()), columns=["GEOHASH", "PARK_COUNT"])
 
-trafik_df[trafik_df['T_COUNT'] >= 40].value_counts()
+
+final_df = pd.merge(final_df, hotel_result_df, on="GEOHASH", how="left")
+final_df = pd.merge(final_df, tourism_result_df, on="GEOHASH", how="left")
+final_df = pd.merge(final_df, health_result_df, on="GEOHASH", how="left")
+final_df = pd.merge(final_df, autopark_result_df, on="GEOHASH", how="left")
+final_df = pd.merge(final_df, fuelstation_result_df, on="GEOHASH", how="left")
+final_df = pd.merge(final_df, park_result_df, on="GEOHASH", how="left")
+
+final_df.to_csv('final_traffic_data.csv')
+
+final_df.sort_values(by='T_COUNT', ascending=False)
+
+final_df[final_df['T_COUNT'] >= 40].value_counts()
 
 
 ###################################################################################################
