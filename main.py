@@ -11,11 +11,11 @@ from geopy.geocoders import Nominatim
 import geopandas as gpd
 import geohash2
 from geohash2 import encode
-from SIHelper import Summarizer
+from SIHelper import Jerzy, Abraham
 
 
 pd.set_option('display.max_columns', None)
-pd.set_option('display.max_rows', 10)
+pd.set_option('display.max_rows', 50)
 pd.set_option('display.width', 500)
 pd.set_option('display.expand_frame_repr', False)
 pd.set_option('display.float_format', lambda x: '%.5f' % x)
@@ -79,151 +79,47 @@ df = data.copy()
 
 
 ###################################################################################################
+############################    FEATURE ENGINEERING   #############################################
 ###################################################################################################
-###################################################################################################
 
-def add_distance_fatures(df):
+abraham = Abraham()
+jerzy = Jerzy(df)
 
-    df['START_LAT'] = df['LATITUDE']
-    df['START_LON'] = df['LONGITUDE']
-    df['END_LAT'] = df['LATITUDE'].shift(-1)
-    df['END_LON'] = df['LONGITUDE'].shift(-1)
+df = abraham.add_distance_features(df)
+df = abraham.add_time_features(df)
+df_base = abraham.create_unique_coordinates_dataframe(df)
 
-    def calculate_distance(lat1, lon1, lat2, lon2):
-        R = 6371  # Yeryüzü ortalama yarıçapı (km)
-        dlat = math.radians(lat2 - lat1)
-        dlon = math.radians(lon2 - lon1)
-        a = math.sin(dlat / 2) * math.sin(dlat / 2) + math.cos(math.radians(lat1)) * math.cos(
-            math.radians(lat2)) * math.sin(dlon / 2) * math.sin(dlon / 2)
-        c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-        distance = R * c
-        return distance
+df_hour = jerzy.find_based_statistics()
 
-    df['DISTANCE_KM'] = df.apply(
-        lambda row: calculate_distance(row['START_LAT'], row['START_LON'], row['END_LAT'], row['END_LON']), axis=1)
-
-    interval = 20
-
-    df['DISTANCE_INTERVAL'] = (df['DISTANCE_KM'] // interval) * interval
-
+def find_and_merge_statistics(jerzy, group_column):
+    df = jerzy.find_custom_statistics_C(group_column=group_column)
     return df
 
-df = add_distance_fatures(df)
+def merge_all_statistics(jerzy, group_columns):
+    merged_df = None
+    for column in group_columns:
+        df = find_and_merge_statistics(jerzy, group_column=column)
+        if merged_df is None:
+            merged_df = jerzy.find_based_statistics()
+        else:
+            merged_df = merged_df.merge(df, on='GEOHASH')
+    return merged_df
 
-df.head()
+group_columns = df.columns[11:]
 
-###################################################################################################
-###################################################################################################
-###################################################################################################
-
-# TODO:  SPECIAL DAYS (NATIONAL HOLIDAYS, RELIGIOUS HOLIDAYS, etc.) WILL BE ADDED.
-
-def add_time_features(df):
-
-    df['DATE_TIME'] = pd.to_datetime(df['DATE_TIME'])
-
-    df['HOUR_N'] = df['DATE_TIME'].dt.hour
-
-    def date_month_year_day_names_time(date):
-        year = date.year
-        month_number = date.month
-        week_number = date.week
-        day_number = date.day
-        time = date.strftime('%H:%M:%S')
-
-        month_names = ['January', 'February', 'March', 'April', 'May', 'June',
-                       'July', 'August', 'September', 'October', 'November', 'December']
-        month_name = month_names[month_number - 1]
-
-        day_names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-        day_name = day_names[date.weekday()]
-
-        return time, day_name, day_number, week_number, month_name, year
-
-    df['HOUR_D'], df['DAY'], df['DAY_NUMBER'], df['WEEK'], df['MONTH'], df['YEAR'] = zip(
-        *df['DATE_TIME'].apply(date_month_year_day_names_time))
-
-    df['SEASON'] = df['MONTH'].apply(lambda x: 'Winter' if x in ['December', 'January', 'February'] else
-    'Spring' if x in ['March', 'April', 'May'] else
-    'Summer' if x in ['June', 'July', 'August'] else
-    'Fall')
-
-    df['DAY_INTERVAL'] = df['DAY'].apply(lambda x: 'Weekends' if x in ['Saturday', 'Sunday']
-    else 'Weekdays')
-
-    time_bins = [0, 5, 9, 12, 15, 18, 21, 24]
-    time_labels = ['Late Night', 'Morning', 'Late Morning', 'Afternoon', 'Late Afternoon', 'Evening', 'Night']
-
-    df['TIME_INTERVAL_N'] = pd.cut(df['HOUR_N'], bins=time_bins, labels=time_labels, include_lowest=True)
-
-    time_bins = [0, 2, 5, 7, 10, 13, 15, 17, 20, 24]
-    time_labels = ['Midnight 24:00-01:59', 'Early Morning 02:00-04:59','Morning 05:00-06:59',
-                   'Morning Rush Hour 07:00-09:59','Late Morning 10:00-12:59',
-                   'Afternoon 13:00-14:59', 'Late Afternoon 15:00-16:59',
-                   'Evening Rush Hour 17:00-19:59', 'Night 20:00-23:59']
-
-    df['TIME_INTERVAL_D'] = pd.cut(df['HOUR_N'], bins=time_bins, labels=time_labels, include_lowest=True)
-
-    return df
-
-df = add_time_features(df)
-
-df.to_csv('updated_concatenated_traffic_data.csv')
-
-#####
-#SUMMARY DATAFRAME WITH NEW FEATURES
-
-df = pd.read_csv('updated_concatenated_traffic_data.csv')
-
-summary_df = Summarizer(df)
-
-
-df_hour = summary_df.find_based_statistics()
-df_day = summary_df.find_custom_statistics(group_column='DAY_NUMBER')
-df_month = summary_df.find_custom_statistics(group_column='MONTH')
-df_season = summary_df.find_custom_statistics(group_column='SEASON')
-df_year = summary_df.find_custom_statistics(group_column='YEAR')
-df_time_interval = summary_df.find_custom_statistics(group_column='TIME_INTERVAL_D')
-df_time_interval.columns = ['GEOHASH', 'TIME_INTERVAL_D', 'AVG_TIME_INTERVAL', 'SUM_TIME_INTERVAL']
-
-final_df = df_hour.merge(df_day, on = 'GEOHASH').merge(df_month, on = 'GEOHASH').merge(df_season, on = 'GEOHASH').merge(df_time_interval, on = 'GEOHASH')
-
-###################################################################################################
-###################################################################################################
-###################################################################################################
-
-# TODO: Model kurulacak.
-
-
+final_df = merge_all_statistics(jerzy, group_columns)
 
 
 ###################################################################################################
 ###################################################################################################
 ###################################################################################################
 
-def find_missing_data_days(start_date, end_date, date_column):
-    empty_year = pd.date_range(start=start_date, end=end_date, periods=(end_date - start_date).days + 1, normalize=True)
-    all_days = set(empty_year)
-    observation_days = set([i.normalize() for i in date_column])
-    missing_days = list(all_days.difference(observation_days))
-    missing_days.sort()
-    missing_days_count = len(missing_days)
-    missing_days_percent = (1 - (len(observation_days) / len(all_days))) * 100
-
-    print(f"Days with Missing Data: {missing_days_count} (%{missing_days_percent:.1f})")
-    for day in missing_days:
-        print(day.date())
-
-###################################################################################################
-###################################################################################################
-###################################################################################################
-
-df_hotel = pd.read_excel('OTEL_SON.xlsx')
-df_tourism = pd.read_csv("sightseeing_places_ISTANBUL.csv")
-df_health = pd.read_excel("saglikguncel.xlsx")
-df_autopark = pd.read_excel("otopark.xlsx")
-df_fuelstation = pd.read_csv("fuel_station1.csv")
-df_park = pd.read_csv("guncellenmis_park.csv")
+df_hotel = pd.read_excel('location_datasets/hotels.xlsx')
+df_tourism = pd.read_csv("location_datasets/touristics.csv")
+df_health = pd.read_excel("location_datasets/health.xlsx")
+df_autopark = pd.read_excel("location_datasets/autoparks.xlsx")
+df_gasstation = pd.read_csv("location_datasets/gas_stations.csv")
+df_park = pd.read_csv("location_datasets/parks.csv")
 
 
 def find_lon_lan_dataframe(df):
@@ -248,18 +144,17 @@ df_tourism = find_lon_lan_dataframe(df_tourism)
 df_health = find_lon_lan_dataframe(df_health)
 df_autopark = find_lon_lan_dataframe(df_autopark)
 
-df_fuelstation.columns = ['NAME', 'LATITUDE', 'LONGITUDE', 'NEIGHBORHOOD_NAME']
+df_gasstation.columns = ['NAME', 'LATITUDE', 'LONGITUDE', 'NEIGHBORHOOD_NAME']
 
-df_fuelstation = find_lon_lan_dataframe(df_fuelstation)
+df_gasstation = find_lon_lan_dataframe(df_gasstation)
 df_park = find_lon_lan_dataframe(df_park)
 
 
 def haversine(lat1, lon1, lat2, lon2):
     from math import radians, sin, cos, sqrt, atan2
 
-    R = 6371  # Dünya yarıçapı (km)
+    R = 6371
 
-    # Koordinatları float türüne dönüştürün
     lat1, lon1, lat2, lon2 = map(float, [lat1, lon1, lat2, lon2])
 
     lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
@@ -283,7 +178,7 @@ hotel_g_list, final_g_list = geohash_to_list(df_hotel, final_df)
 tourism_g_list, final_g_list = geohash_to_list(df_tourism, final_df)
 health_g_list, final_g_list = geohash_to_list(df_health, final_df)
 autopark_g_list, final_g_list = geohash_to_list(df_autopark, final_df)
-fuelstation_g_list, final_g_list = geohash_to_list(df_fuelstation, final_df)
+gasstation_g_list, final_g_list = geohash_to_list(df_gasstation, final_df)
 park_g_list, final_g_list = geohash_to_list(df_park, final_df)
 
 
@@ -299,7 +194,7 @@ def unique(list1):
         if x not in unique_list:
             unique_list.append(x)
 
-unique(y)
+unique(final_g_list)
 
 def count_places_near_traffic(final_g_list, place_g_list):
     result = {}
@@ -323,14 +218,14 @@ hotel_result = count_places_near_traffic(unique_list, hotel_g_list)
 tourism_result = count_places_near_traffic(unique_list, tourism_g_list)
 health_result = count_places_near_traffic(unique_list, health_g_list)
 autopark_result = count_places_near_traffic(unique_list, autopark_g_list)
-fuelstation_result = count_places_near_traffic(unique_list, fuelstation_g_list)
+gasstation_result = count_places_near_traffic(unique_list, gasstation_g_list)
 park_result = count_places_near_traffic(unique_list, park_g_list)
 
 hotel_result_df = pd.DataFrame(list(hotel_result.items()), columns=["GEOHASH", "HOTEL_COUNT"])
 tourism_result_df = pd.DataFrame(list(tourism_result.items()), columns=["GEOHASH", "TOURISM_COUNT"])
 health_result_df = pd.DataFrame(list(health_result.items()), columns=["GEOHASH", "HEALTH_COUNT"])
 autopark_result_df = pd.DataFrame(list(autopark_result.items()), columns=["GEOHASH", "AUTOPARK_COUNT"])
-fuelstation_result_df = pd.DataFrame(list(fuelstation_result.items()), columns=["GEOHASH", "FUELSTATION_COUNT"])
+gasstation_result_df = pd.DataFrame(list(gasstation_result.items()), columns=["GEOHASH", "GASSTATION_COUNT"])
 park_result_df = pd.DataFrame(list(park_result.items()), columns=["GEOHASH", "PARK_COUNT"])
 
 
@@ -338,42 +233,141 @@ final_df = pd.merge(final_df, hotel_result_df, on="GEOHASH", how="left")
 final_df = pd.merge(final_df, tourism_result_df, on="GEOHASH", how="left")
 final_df = pd.merge(final_df, health_result_df, on="GEOHASH", how="left")
 final_df = pd.merge(final_df, autopark_result_df, on="GEOHASH", how="left")
-final_df = pd.merge(final_df, fuelstation_result_df, on="GEOHASH", how="left")
+final_df = pd.merge(final_df, gasstation_result_df, on="GEOHASH", how="left")
 final_df = pd.merge(final_df, park_result_df, on="GEOHASH", how="left")
 
-final_df.to_csv('final_traffic_data.csv')
-
-final_df.sort_values(by='T_COUNT', ascending=False)
-
-final_df[final_df['T_COUNT'] >= 40].value_counts()
-
+final_df.to_csv('final_traffic_data_C.csv')
 
 ###################################################################################################
 ###################################################################################################
 ###################################################################################################
 
-unique_coordinates_df = df.drop_duplicates(subset=['LATITUDE', 'LONGITUDE'])
+def find_missing_data_days(start_date, end_date, date_column):
+    empty_year = pd.date_range(start=start_date, end=end_date, periods=(end_date - start_date).days + 1, normalize=True)
+    all_days = set(empty_year)
+    observation_days = set([i.normalize() for i in date_column])
+    missing_days = list(all_days.difference(observation_days))
+    missing_days.sort()
+    missing_days_count = len(missing_days)
+    missing_days_percent = (1 - (len(observation_days) / len(all_days))) * 100
 
-unique_latitudes = unique_coordinates_df['LATITUDE'].tolist()
-unique_longitudes = unique_coordinates_df['LONGITUDE'].tolist()
+    print(f"Days with Missing Data: {missing_days_count} (%{missing_days_percent:.1f})")
+    for day in missing_days:
+        print(day.date())
 
-len(unique_latitudes)
-len(unique_longitudes)
 
-new_df = pd.DataFrame({'LATITUDE': unique_latitudes, 'LONGITUDE': unique_longitudes})
+###################################################################################################
+############################   MODEL CREATION   ###################################################
+###################################################################################################
 
-new_df.nunique()
 
-filtered_data = df.loc[df['GEOHASH'].str.contains('sxk3k', na=False)]
+df = pd.read_csv('final_traffic_data_C.csv')
 
-data = pd.DataFrame({
-    'LATITUDE': unique_latitudes,
-    'LONGITUDE': unique_longitudes
-})
+df.drop(columns="Unnamed: 0", axis= 1, inplace=True)
 
-m = folium.Map(location=[data['LATITUDE'].mean(), data['LONGITUDE'].mean()], zoom_start=10)
 
-for index, row in data.iterrows():
+def grab_col_names(dataframe, cat_th=10, car_th=20):
+
+    # cat_cols, cat_but_car
+    cat_cols = [col for col in dataframe.columns if dataframe[col].dtypes == "0"]
+
+    num_but_cat = [col for col in dataframe.columns if dataframe[col].nunique() < cat_th and
+                   dataframe[col].dtypes != "0"]
+
+    cat_but_car = [col for col in dataframe.columns if dataframe[col].nunique() > car_th and
+                   dataframe[col].dtypes == "0"]
+
+    cat_cols = cat_cols + num_but_cat
+    cat_cols = [col for col in cat_cols if col not in cat_but_car]
+
+    # num_cols
+    num_cols = [col for col in dataframe.columns if dataframe[col].dtypes != "0"]
+    num_cols = [col for col in num_cols if col not in num_but_cat]
+
+    # print(f"Observations: {dataframe.shape[0]}")
+    # print(f"Variables: {dataframe.shape[1]}")
+    # print(f'cat_cols: {len(cat_cols)}')
+    # print(f'num_cols: {len(num_cols)}')
+    # print(f'cat_but_car: {len(cat_but_car)}')
+    # print(f'num_but_cat: {len(num_but_cat)}')
+    return cat_cols, num_cols, cat_but_car
+
+
+cat_cols, num_cols, cat_but_car = grab_col_names(df, cat_th= 31, car_th=20)
+
+df.head()
+df.isnull().sum()
+df.info()
+df.describe().T
+
+for col in df.columns:
+    if df[col].isnull().any():
+        mean_value = df[col].mean()
+        df[col].fillna(mean_value, inplace=True)
+
+### SCALING ###
+
+from sklearn.preprocessing import RobustScaler
+
+df_ng = df.drop(columns='GEOHASH', axis=1)
+
+scaler = RobustScaler()
+scaled_data = scaler.fit_transform(df_ng)
+
+
+### K-MEANS ###
+
+from sklearn.cluster import KMeans
+from yellowbrick.cluster import KElbowVisualizer
+
+kmeans = KMeans()
+elbow = KElbowVisualizer(kmeans, k=(2, 20))
+elbow.fit(scaled_data)
+elbow.show()
+
+elbow.elbow_value_
+
+kmeans = KMeans(n_clusters=elbow.elbow_value_).fit(scaled_data)
+
+kmeans.n_clusters
+kmeans.cluster_centers_
+kmeans.labels_
+scaled_data[0:5]
+
+clusters_kmeans = kmeans.labels_
+
+df["cluster"] = clusters_kmeans
+
+df.head()
+
+df["cluster"] = df["cluster"] + 1
+
+df[df["cluster"]==5]
+
+df.to_csv("clusters.csv")
+
+
+df_ = pd.read_csv('updated_concatenated_traffic_data.csv')
+
+
+unique_coordinates_df_ = df_.drop_duplicates(subset="GEOHASH")
+
+unique_geohash = unique_coordinates_df_['GEOHASH'].tolist()
+unique_latitudes = unique_coordinates_df_['LATITUDE'].tolist()
+unique_longitudes = unique_coordinates_df_['LONGITUDE'].tolist()
+
+df_with_lat_lon = pd.DataFrame({'GEOHASH': unique_geohash, 'LATITUDE': unique_latitudes, 'LONGITUDE': unique_longitudes})
+
+
+
+df = df.merge(df_with_lat_lon,on="GEOHASH")
+
+df_cluster_5 = df[df['cluster'] == 2]
+
+
+m = folium.Map(location=[df_cluster_5['LATITUDE'].mean(), df_cluster_5['LONGITUDE'].mean()], zoom_start=10)
+
+for index, row in df_cluster_5.iterrows():
     folium.CircleMarker(
         location=[row['LATITUDE'], row['LONGITUDE']],
         radius=5,
@@ -382,7 +376,21 @@ for index, row in data.iterrows():
         fill_color='blue'
     ).add_to(m)
 
-m.save('map.html')
+m.save('tahmin2.html')
+
+
+### PCA ###
+
+pca = PCA(n_components = 8)
+pca.fit(df)
+
+x_pca = pca.transform(df)
+
+print("Variance Ratio", pca.explained_variance_ratio_)
+print("Sum:", sum(pca.explained_variance_ratio_))
+
+# TODO: Model kurulacak.
+
 
 ###################################################################################################
 ###################################################################################################
