@@ -1,5 +1,7 @@
 import math
+from math import radians, sin, cos, sqrt, atan2
 import pandas as pd
+import geohash2
 
 class Abraham:
 
@@ -279,4 +281,57 @@ class Jerzy:
                                   else col for col in total_df.columns]
         result_df = avg_df.merge(total_df, on=['GEOHASH'])
         return result_df
+
+class Marco:
+    def find_lon_lan_dataframe(self, dataframe):
+        latitude = dataframe["LATITUDE"]
+        longitude = dataframe["LONGITUDE"]
+
+        dataframe["LATITUDE"] = dataframe["LATITUDE"].astype(float)
+        dataframe["LONGITUDE"] = dataframe["LONGITUDE"].astype(float)
+
+        dataframe["GEOHASH"] = ""
+        for index, row in dataframe.iterrows():
+            latitude = row["LATITUDE"]
+            longitude = row["LONGITUDE"]
+            geohash_code = geohash2.encode(latitude, longitude)
+            dataframe.at[index, "GEOHASH"] = geohash_code
+
+        return dataframe
+
+    def haversine(self, latitude1, longitude1, latitude2, longitude2):
+        R = 6371
+
+        latitude1, longitude1, latitude2, longitude2 = map(float, [latitude1, longitude1, latitude2, longitude2])
+
+        latitude1, longitude1, latitude2, longitude2 = map(radians, [latitude1, longitude1, latitude2, longitude2])
+
+        dlat = latitude2 - latitude1
+        dlon = longitude2 - longitude1
+
+        a = sin(dlat / 2) ** 2 + cos(latitude1) * cos(latitude2) * sin(dlon / 2) ** 2
+        c = 2 * atan2(sqrt(a), sqrt(1 - a))
+
+        return R * c
+
+    def count_places_near_traffic(self, place_dataframe, final_dataframe):
+
+        place_g_list = place_dataframe["GEOHASH"].tolist()
+        final_g_list = final_dataframe["GEOHASH"].tolist()
+
+        result = {}
+
+        for i in final_g_list:
+            count = 0
+            latitude1, longitude1 = geohash2.decode(i)
+
+            for place in place_g_list:
+                latitude2, longitude2 = geohash2.decode(place)
+
+                if self.haversine(latitude1, longitude1, latitude2, longitude2) <= 20:
+                    count += 1
+
+            result[i] = count
+
+        return result
 
