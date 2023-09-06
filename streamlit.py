@@ -1,5 +1,5 @@
 import streamlit
-
+from geopy.distance import great_circle
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -27,30 +27,11 @@ pd.set_option('display.float_format', lambda x: '%.3f' % x)
 
 st.set_page_config(page_title="Electrical Vehicle", layout="wide")
 st.sidebar.title("Navigation")
-page = st.sidebar.radio("Go to", ["Show Features", "Show Clusters", "Contact"])
+page = st.sidebar.radio("Go to", ["Summary", "Finding a shortest route", "Contact"])
 
-if page == "Show Features":
+if page == "Summary":
     st.title("Electrical Vehicle")
 
-
-    def user_input_features():
-        # DataSize = st.sidebar.slider('DataSize', 100, 450, 1000)
-        # NumberOfCluster = st.sidebar.slider('NumberOfCluster', min_value=1, max_value=18, step=1)
-        # Varience = st.sidebar.slider('Varience', 1, 5, 10)
-        # NumberofCentroids = st.sidebar.slider('NumberofCentroids', 1, 5, 10)
-        LATITUDE = st.sidebar.number_input('LATITUDE')
-        LONGITUDE = st.sidebar.number_input('LONGITUDE')
-        data = {'LATITUDE': LATITUDE,
-                'LONGITUDE': LONGITUDE}
-
-        features = pd.DataFrame(data, index=[0])
-        return features
-
-
-    input_df = user_input_features()
-    # num = input_df["NumberOfCluster"][0]
-    # num = 6
-    st.dataframe(input_df)
     url = "https://raw.githubusercontent.com/oguzcnmdn/MiuulFinalProject/main/datasets/final_traffic_data_C.csv"
     df = pd.read_csv(url)
     # st.write("Kulalnıcı bilgilerini ve veri setini birleştirelim.")
@@ -218,7 +199,7 @@ if page == "Show Features":
     plt.show(block=True)
     elbow.show()
 
-    st.write(f'Elbow Method K ={6}')
+    st.write(f'Elbow Method K ={elbow.elbow_value_}')
     st.line_chart(elbow.k_scores_, width=500, use_container_width=True)
 
     clusters_kmeans = kmeans.labels_
@@ -237,44 +218,161 @@ if page == "Show Features":
         {'GEOHASH': unique_geohash, 'LATITUDE': unique_latitudes, 'LONGITUDE': unique_longitudes})
     df = df.merge(df_with_lat_lon, on="GEOHASH")
 
+    df.to_csv("df_son.csv")
+
     df_cluster = df["cluster"].value_counts().reset_index()
     df_cluster = df_cluster.sort_values(by="cluster", ascending=False)
     df_cluster.columns = ['cluster', 'Tavsiye']
     st.dataframe(df_cluster)
 
-    map_1 = st.checkbox('Map_1')
-    
-    for i in range(0, len(df_cluster)):
-        st.write(f'Number Of Cluster ={df_cluster["cluster"][i]} and Count = {df_cluster["Tavsiye"][i]}')
-        df_cluster_5 = df[df['cluster'] == df_cluster["cluster"][i]].loc[:, ["cluster", "LATITUDE_x", "LONGITUDE_x"]]
-        st.map(df_cluster_5, latitude='LATITUDE_x', longitude='LONGITUDE_x', size=60, color='#0044ff')
+    ###################################################
+    # Tüm haritaları gösterir.
+    ###################################################
 
-    # # Folium haritasını oluştur
-    #
-    # m = folium.Map(location=[df_cluster_5['LATITUDE_x'].mean(), df_cluster_5['LONGITUDE_x'].mean()], zoom_start=10)
-    #
-    # for index, row in df_cluster_5.iterrows():
-    #     folium.CircleMarker(
-    #         location=[row['LATITUDE_x'], row['LONGITUDE_x']],
-    #         radius=5,
-    #         color='blue',
-    #         fill=True,
-    #         fill_color='blue'
-    #     ).add_to(m)
-    #
-    # # Streamlit içinde Folium haritasını göster
-    # folium_static(m)
-    # m = folium.Map(location=[df_cluster_5['LONGITUDE_y'].mean(), df_cluster_5['LATITUDE_y'].mean()], zoom_start=10)
-    #
-    # for index, row in df_cluster_5.iterrows():
-    #     folium.CircleMarker(
-    #         location=[row['LONGITUDE_y'], row['LATITUDE_y']],
-    #         radius=5,
-    #         color='blue',
-    #         fill=True,
-    #         fill_color='blue'
-    #     ).add_to(m)
-    # if refresh_button:
-    #     st.map(df_cluster_5, latitude='LATITUDE_x', longitude='LONGITUDE_x', size=60, color='#0044ff')
-    # refresh_button = st.button("Harita Yenileme")
-# elif page == 'Contact':
+    for i in range(1, elbow.elbow_value_):
+        st.write(f'Number Of Cluster ={i} and Count = {df_cluster[df_cluster["cluster"] == i]["Tavsiye"].values[0]}')
+        df_cluster_ = df[df['cluster'] == i].loc[:, ["cluster", "LATITUDE_x", "LONGITUDE_x"]]
+        st.map(df_cluster_, latitude='LATITUDE_x', longitude='LONGITUDE_x', size=60, color='#0044ff')
+
+###################################################
+# Check Box ama bence böyle olmasın her yenilendiğinde cluster değişiyor.
+###################################################
+#
+# Cluster2 = st.checkbox('Cluster_2')
+# if Cluster2:
+#     st.write(f'Number Of Cluster ={2} and Count = {df_cluster[df_cluster["cluster"] == 2]["Tavsiye"].values[0]}')
+#     df_cluster_5 = df[df['cluster'] == 2].loc[:,
+#                    ["cluster", "LATITUDE_x", "LONGITUDE_x"]]
+#     st.map(df_cluster_5, latitude='LATITUDE_x', longitude='LONGITUDE_x', size=60, color='#0044ff')
+#
+# Cluster3 = st.checkbox('Cluster_3')
+# if Cluster3:
+#     st.write(f'Number Of Cluster ={3} and Count = {df_cluster[df_cluster["cluster"] == 3]["Tavsiye"].values[0]}')
+#     df_cluster_5 = df[df['cluster'] == 3].loc[:,
+#                    ["cluster", "LATITUDE_x", "LONGITUDE_x"]]
+#     st.map(df_cluster_5, latitude='LATITUDE_x', longitude='LONGITUDE_x', size=60, color='#0044ff')
+#
+# Cluster4 = st.checkbox('Cluster_4')
+# if Cluster4:
+#     st.write(f'Number Of Cluster ={4} and Count = {df_cluster[df_cluster["cluster"] == 4]["Tavsiye"].values[0]}')
+#     df_cluster_5 = df[df['cluster'] == 4].loc[:,
+#                    ["cluster", "LATITUDE_x", "LONGITUDE_x"]]
+#     st.map(df_cluster_5, latitude='LATITUDE_x', longitude='LONGITUDE_x', size=60, color='#0044ff')
+#
+# Cluster5 = st.checkbox('Cluster_5')
+# if Cluster5:
+#     st.write(f'Number Of Cluster ={5} and Count = {df_cluster[df_cluster["cluster"] == 5]["Tavsiye"].values[0]}')
+#     df_cluster_5 = df[df['cluster'] == 5].loc[:,
+#                    ["cluster", "LATITUDE_x", "LONGITUDE_x"]]
+#     st.map(df_cluster_5, latitude='LATITUDE_x', longitude='LONGITUDE_x', size=60, color='#0044ff')
+#
+# Cluster6 = st.checkbox('Cluster_6')
+# if Cluster6:
+#     st.write(f'Number Of Cluster ={6} and Count = {df_cluster[df_cluster["cluster"] == 6]["Tavsiye"].values[0]}')
+#     df_cluster_5 = df[df['cluster'] == 6].loc[:,
+#                    ["cluster", "LATITUDE_x", "LONGITUDE_x"]]
+#     st.map(df_cluster_5, latitude='LATITUDE_x', longitude='LONGITUDE_x', size=60, color='#0044ff')
+
+elif page == 'Finding a shortest route':
+
+    def user_input_features():
+        # DataSize = st.sidebar.slider('DataSize', 100, 450, 1000)
+        # NumberOfCluster = st.sidebar.slider('NumberOfCluster', min_value=1, max_value=18, step=1)
+        # Varience = st.sidebar.slider('Varience', 1, 5, 10)
+        # NumberofCentroids = st.sidebar.slider('NumberofCentroids', 1, 5, 10)
+        LATITUDE = st.sidebar.number_input('LATITUDE')
+        LONGITUDE = st.sidebar.number_input('LONGITUDE')
+        data = {'LATITUDE': LATITUDE,
+                'LONGITUDE': LONGITUDE}
+
+        features = pd.DataFrame(data, index=[0])
+        return features
+
+
+    input_df = user_input_features()
+    st.dataframe(input_df)
+    
+    if st.button('Find shortest route'):
+        # Kullanıcının girdiği konum
+
+        st.title("Your Location")
+        st.map(input_df, latitude='LATITUDE', longitude='LONGITUDE', size=60, color='#0044ff')
+        df = pd.read_csv("D:\Miuul\df_son.csv")
+
+        st.title("Finding a shortest route")
+
+        df_locaiton = df.loc[:, ["GEOHASH", "LATITUDE_x", "LONGITUDE_x", "cluster"]]
+        df_locaiton["LATITUDE_input"] = input_df["LATITUDE"]
+        df_locaiton = df_locaiton.fillna(input_df["LATITUDE"].values[0])
+        df_locaiton["LONGITUDE_input"] = input_df["LONGITUDE"]
+        df_locaiton = df_locaiton.fillna(input_df["LONGITUDE"].values[0])
+
+
+        def haversine(lat1, lon1, lat2, lon2):
+            # Dünya'nın yarı çapı
+            R = 6371  # Yarı çapı km olarak alabilirsiniz.
+
+            # Lat ve Lon'u radyanlara dönüştürün
+            lat1 = math.radians(lat1)
+            lon1 = math.radians(lon1)
+            lat2 = math.radians(lat2)
+            lon2 = math.radians(lon2)
+
+            # Haversine formülü
+            dlon = lon2 - lon1
+            dlat = lat2 - lat1
+            a = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
+            c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+            distance = R * c
+
+            return distance
+
+
+        # Mesafeyi hesaplayın ve yeni bir sütun ekleyin
+        df_locaiton['Mesafe'] = df_locaiton.apply(
+            lambda row: haversine(row['LATITUDE_input'], row['LONGITUDE_input'], row['LATITUDE_x'], row['LONGITUDE_x']),
+            axis=1)
+        df_kısa = df_locaiton.sort_values(by='Mesafe', ascending=True).head()
+        st.map(df_kısa, latitude='LATITUDE_x', longitude='LONGITUDE_x', size=60, color='#0044ff')
+
+
+else:
+    st.title("Contact")
+
+    col1, col2, = st.columns(2)
+
+    with col1:
+        st.title("Miuul")
+        image_url = "https://miuul.com/image/theme/logo-dark.png"
+        st.image(image_url, use_column_width=True)
+
+    with col2:
+        st.title("Veri Bilimi Okulu")
+        image_url = "https://www.veribilimiokulu.com/wp-content/uploads/2020/12/veribilimiokulu_logo-crop.png"
+        st.image(image_url, use_column_width=True)
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        link = "[Miuul](https://miuul.com)"
+        st.markdown(link, unsafe_allow_html=True)
+
+    with col2:
+        link = "[Veri Bilimi Okulu](https://bootcamp.veribilimiokulu.com/bootcamp-programlari/veri-bilimci-yetistirme-programi/)"
+        st.markdown(link, unsafe_allow_html=True)
+
+    col1, = st.columns(1)
+
+    with col1:
+        st.title("Kaynakça 🎤")
+        video_url = "https://www.youtube.com/watch?v=Ww9M0WJfGN8"
+        st.video(video_url)
+
+    col3, = st.columns(1)
+    with col3:
+        st.title("Linkedin")
+        st.write("[Yasemin Ergün](https://www.linkedin.com/in/yaseminergun)")
+        st.write("[Fatma Yağmurlu]()")
+        st.write("[Oğuzcan Maden](https://www.linkedin.com/in/oguzcnmdn/)")
+        st.write("[Cenk Bayender]()")
+        st.write("[Ozan Bahar](https://www.linkedin.com/in/ozan-bahar/)")
