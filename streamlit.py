@@ -228,8 +228,7 @@ if page == "Summary":
     ###################################################
     # Tüm haritaları gösterir.
     ###################################################
-
-    for i in range(1, elbow.elbow_value_):
+    for i in range(1, (elbow.elbow_value_ + 1)):
         st.write(f'Number Of Cluster ={i} and Count = {df_cluster[df_cluster["cluster"] == i]["Tavsiye"].values[0]}')
         df_cluster_ = df[df['cluster'] == i].loc[:, ["cluster", "LATITUDE_x", "LONGITUDE_x"]]
         st.map(df_cluster_, latitude='LATITUDE_x', longitude='LONGITUDE_x', size=60, color='#0044ff')
@@ -291,13 +290,13 @@ elif page == 'Finding a shortest route':
 
     input_df = user_input_features()
     st.dataframe(input_df)
-    
+
     if st.button('Find shortest route'):
         # Kullanıcının girdiği konum
 
         st.title("Your Location")
         st.map(input_df, latitude='LATITUDE', longitude='LONGITUDE', size=60, color='#0044ff')
-        df = pd.read_csv("D:\Miuul\df_son.csv")
+        df = pd.read_csv("df_son.csv")
 
         st.title("Finding a shortest route")
 
@@ -372,7 +371,7 @@ else:
     with col3:
         st.title("Linkedin")
         st.write("[Yasemin Ergün](https://www.linkedin.com/in/yaseminergun)")
-        st.write("[Fatma Yağmurlu]()")
+        st.write("[Fatma Yağmurlu](http://www.linkedin.com/in/fatmayagmurlu)")
         st.write("[Oğuzcan Maden](https://www.linkedin.com/in/oguzcnmdn/)")
-        st.write("[Cenk Bayender]()")
+        st.write("[Cenk Bayender](https://www.linkedin.com/in/cenk-bayender-98a285130)")
         st.write("[Ozan Bahar](https://www.linkedin.com/in/ozan-bahar/)")
