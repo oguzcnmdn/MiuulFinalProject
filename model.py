@@ -2,11 +2,31 @@
 ############################   MODEL CREATION   ###################################################
 ###################################################################################################
 
+import numpy as np
 import pandas as pd
+import folium
+from sklearn.impute import SimpleImputer
+from sklearn.cluster import KMeans
+from sklearn.preprocessing import RobustScaler
+from yellowbrick.cluster import KElbowVisualizer
+
+
+pd.set_option('display.max_columns', None)
+pd.set_option('display.max_rows', 10)
+pd.set_option('display.width', 500)
+pd.set_option('display.expand_frame_repr', False)
+pd.set_option('display.float_format', lambda x: '%.5f' % x)
 
 df = pd.read_csv('final_traffic_data_C.csv')
 
 df.drop(columns="Unnamed: 0", axis= 1, inplace=True)
+
+df["HOTEL_SCORE"]= pd.qcut(df["HOTEL_COUNT"], 5, labels= [1, 2, 3, 4, 5])
+df["TOURISM_SCORE"]= pd.qcut(df["TOURISM_COUNT"], 5, labels= [1, 2, 3, 4, 5])
+df["HEALTH_SCORE"]= pd.qcut(df["HEALTH_COUNT"], 5, labels= [1, 2, 3, 4, 5])
+df["AUTOPARK_SCORE"]= pd.qcut(df["AUTOPARK_COUNT"], 5, labels= [1, 2, 3, 4, 5])
+df["GASSTATION_COUNT"]= pd.qcut(df["GASSTATION_COUNT"], 5, labels= [1, 2, 3, 4, 5])
+df["PARK_SCORE"]= pd.qcut(df["PARK_COUNT"], 5, labels= [1, 2, 3, 4, 5])
 
 
 def grab_col_names(dataframe, cat_th=10, car_th=20):
@@ -36,23 +56,31 @@ def grab_col_names(dataframe, cat_th=10, car_th=20):
     return cat_cols, num_cols, cat_but_car
 
 
+
 cat_cols, num_cols, cat_but_car = grab_col_names(df, cat_th= 31, car_th=20)
 
-df.head()
-df.isnull().sum()
-df.info()
 df.describe().T
 
-for col in df.columns:
-    if df[col].isnull().any():
-        mean_value = df[col].mean()
-        df[col].fillna(mean_value, inplace=True)
+### CONVERTING NAN AND INF VALUES ###
+
+df_ng = df.drop(columns='GEOHASH', axis=1)
+
+def one_hot_encoder(dataframe, categorical_cols, drop_first=True):
+    dataframe = pd.get_dummies(dataframe, columns=categorical_cols, drop_first=drop_first)
+    return dataframe
+
+ohe_cols = [col for col in df_ng.columns if 30 >= df_ng[col].nunique() > 2]
+
+for col in ohe_cols:
+    df_ng = one_hot_encoder(df_ng, [col])
+
 
 ### SCALING ###
 
-from sklearn.preprocessing import RobustScaler
+df_ng[df_ng == np.inf] = np.nan
 
-df_ng = df.drop(columns='GEOHASH', axis=1)
+simpleimputer = SimpleImputer(missing_values=np.nan, strategy='mean')
+df_ng = simpleimputer.fit_transform(df_ng)
 
 scaler = RobustScaler()
 scaled_data = scaler.fit_transform(df_ng)
@@ -60,40 +88,74 @@ scaled_data = scaler.fit_transform(df_ng)
 
 ### K-MEANS ###
 
-from sklearn.cluster import KMeans
-from yellowbrick.cluster import KElbowVisualizer
-
 kmeans = KMeans()
 elbow = KElbowVisualizer(kmeans, k=(2, 20))
 elbow.fit(scaled_data)
 elbow.show()
 
-elbow.elbow_value_
-
 kmeans = KMeans(n_clusters=elbow.elbow_value_).fit(scaled_data)
-
-kmeans.n_clusters
-kmeans.cluster_centers_
-kmeans.labels_
-scaled_data[0:5]
 
 clusters_kmeans = kmeans.labels_
 
 df["cluster"] = clusters_kmeans
 
-df.head()
-
 df["cluster"] = df["cluster"] + 1
 
-df.to_csv("clustered_final.csv")
+#### SECOND MODEL ####
+##################deneme#########
 
-df_cluster = df[df['cluster'] == 5]
+df_cluster_5 = df[df['cluster'] == 5]
 
-import folium
+def one_hot_encoder(dataframe, categorical_cols, drop_first=True):
+    dataframe = pd.get_dummies(dataframe, columns=categorical_cols, drop_first=drop_first)
+    return dataframe
 
-m = folium.Map(location=[df_cluster['LATITUDE'].mean(), df_cluster['LONGITUDE'].mean()], zoom_start=10)
+ohe_cols = [col for col in df_cluster_5.columns if 30 >= df_cluster_5[col].nunique() > 2]
 
-for index, row in df_cluster.iterrows():
+for col in ohe_cols:
+    df_cluster_5 = one_hot_encoder(df_cluster_5, [col])
+
+
+bool_cols = [col for col in df_cluster_5.columns if df_cluster_5[col].dtype == bool]
+
+for col in bool_cols:
+    df_cluster_5[col] = df_cluster_5[col].astype(int)
+
+df_cluster_5_ng = df_cluster_5.drop(columns= 'GEOHASH')
+
+df_cluster_5_ng[df_cluster_5_ng == np.inf] = np.nan
+
+simpleimputer = SimpleImputer(missing_values=np.nan, strategy='mean')
+df_cluster_5_ng = simpleimputer.fit_transform(df_cluster_5_ng)
+
+### SCALING ###
+
+scaler = RobustScaler()
+scaled_data = scaler.fit_transform(df_cluster_5_ng)
+
+kmeans = KMeans()
+
+kmeans = KMeans(n_clusters=3).fit(scaled_data)
+
+clusters_kmeans = kmeans.labels_
+
+df_cluster_5["cluster"] = clusters_kmeans
+
+df_cluster_5["cluster"] = df_cluster_5["cluster"] + 1
+
+df_cluster_5["cluster"].value_counts()
+
+df_cluster_5.to_csv("clustered_final.csv")
+
+### CLUSTER VISUALIZATION ###
+
+df = pd.read_csv('clustered_final.csv')
+
+clustered_final = df[df['cluster'] == 3]
+
+m = folium.Map(location=[clustered_final['LATITUDE'].mean(), clustered_final['LONGITUDE'].mean()], zoom_start=10)
+
+for index, row in clustered_final.iterrows():
     folium.CircleMarker(
         location=[row['LATITUDE'], row['LONGITUDE']],
         radius=5,
@@ -102,7 +164,7 @@ for index, row in df_cluster.iterrows():
         fill_color='blue'
     ).add_to(m)
 
-m.save('cluster_5.html')
+m.save('cluster_3.html')
 
 
 ### PCA ###
