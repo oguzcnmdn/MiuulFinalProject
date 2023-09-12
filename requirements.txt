@@ -1,7 +1,6 @@
 streamlit
 pandas
 matplotlib
-math
 scikit-learn
+numpy
 yellowbrick
-scikit-yb
