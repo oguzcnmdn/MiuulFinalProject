@@ -4,3 +4,4 @@ matplotlib
 scikit-learn
 numpy
 yellowbrick
+streamlit_option_menu
