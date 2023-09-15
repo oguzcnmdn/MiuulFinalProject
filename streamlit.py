@@ -74,19 +74,19 @@ if selected == "Summary":
 
     df_unique_geohash_locations = create_unique_coordinates_dataframe(df)
 
-    st.map(df_unique_geohash_locations, latitude='LATITUDE', longitude='LONGITUDE', color = '#0044ff')
+    #st.map(df_unique_geohash_locations, latitude='LATITUDE', longitude='LONGITUDE', color = '#0044ff')
 
 #######################################################################################################################
 ######################################## IMPORTANT LOCATIONS VISUALIZATION ############################################
 #######################################################################################################################
 
 
-    df_touristic = pd.read_csv('datasets/location_datasets/touristics.csv')
-    df_parks = pd.read_csv('datasets/location_datasets/parks.csv')
-    df_health = pd.read_csv('datasets/location_datasets/health.csv')
-    df_hotels = pd.read_csv('datasets/location_datasets/hotels.csv')
-    df_gasstations = pd.read_csv('datasets/location_datasets/gas_stations.csv')
-    df_autoparks = pd.read_csv('datasets/location_datasets/autoparks.csv')
+    df_touristic = pd.read_csv('location_datasets/touristics.csv')
+    df_parks = pd.read_csv('location_datasets/parks.csv')
+    df_health = pd.read_csv('location_datasets/health.csv')
+    df_hotels = pd.read_csv('location_datasets/hotels.csv')
+    df_gasstations = pd.read_csv('location_datasets/gas_stations.csv')
+    df_autoparks = pd.read_csv('location_datasets/autoparks.csv')
 
     df_touristic['Type'] = "Touristic"
     df_parks['Type'] = 'Park'
@@ -193,7 +193,7 @@ if selected == "Summary":
 
     df_cluster_best_FM = data[data['cluster'] == selected_cluster_numbers[0]]
 
-    st.map(df_cluster_best_FM, latitude='LATITUDE', longitude='LONGITUDE', color = '#0044ff')
+    #st.map(df_cluster_best_FM, latitude='LATITUDE', longitude='LONGITUDE', color = '#0044ff')
 
 
     df_cluster_best_FM_d = df_cluster_best_FM.drop(columns=['Unnamed: 0', 'GEOHASH', 'LATITUDE', 'LONGITUDE'], axis=1)
@@ -249,40 +249,25 @@ if selected == "Summary":
 
 elif selected == 'Closest Locations':
 
-    address = st.text_input('Enter Location:')
+    df_touristic = pd.read_csv('location_datasets/touristics.csv')
+    
+    df_touristic['LONGITUDE'] = df_touristic['LONGITUDE'].astype(float)
+    df_touristic['LATITUDE'] = df_touristic['LATITUDE'].astype(float)
+
+    selected_location = st.selectbox('Select a Location:', df_touristic['NAME'])
+
 
     if st.button('Find'):
-
         def user_input_features():
+            selected_row = df_touristic[df_touristic['NAME'] == selected_location]
+            latitude = selected_row['LATITUDE'].values[0]
+            longitude = selected_row['LONGITUDE'].values[0]
 
-
-            def get_lat_long(address):
-                api_key = 'AIzaSyD8u0NfMhPoLjh9MEIwYmQExsdZVjKA09A'
-
-                url = f'https://maps.googleapis.com/maps/api/geocode/json?address={address}&key={api_key}'
-
-                response = requests.get(url)
-
-                data = response.json()
-
-                if data['status'] != 'OK':
-                    print(f'Error: {data["status"]}')
-                    return None
-
-                location = data['results'][0]['geometry']['location']
-                latitude = location['lat']
-                longitude = location['lng']
-
-                return latitude, longitude
-
-            coordinates = get_lat_long(address)
-
-            data_1 = {'LATITUDE': coordinates[0],
-                      'LONGITUDE': coordinates[1]}
+            data_1 = {'LATITUDE': latitude,
+                      'LONGITUDE': longitude}
 
             features = pd.DataFrame(data_1, index=[0])
             return features
-
 
         input_df = user_input_features()
 
@@ -383,7 +368,7 @@ else:
         st.markdown(
             """
             <a href="https://www.linkedin.com/in/yaseminergun" target="_blank">
-                <img src="https://media.licdn.com/dms/image/D4D35AQGyTD5pg1BsXg/profile-framedphoto-shrink_400_400/0/1694430364820?e=1695348000&v=beta&t=PRJ0bzUDPCtRIc7MNyzEyhMV-dr9w-efqq0khPTmMkk" alt="Yasemin Ergün" width="160" height="160">
+                <img src="https://media.licdn.com/dms/image/C5603AQEAUpI-UcNZ-w/profile-displayphoto-shrink_400_400/0/1663076428087?e=1700092800&v=beta&t=c0pAQt6hyBjywDp031L6FUsl4XNICFBZIfRwveUxQ-U" alt="Yasemin Ergün" width="160" height="160">
             </a>
             """,
             unsafe_allow_html=True
