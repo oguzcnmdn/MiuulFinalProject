@@ -81,12 +81,12 @@ if selected == "Summary":
 #######################################################################################################################
 
 
-    df_touristic = pd.read_csv('location_datasets/touristics.csv')
-    df_parks = pd.read_csv('location_datasets/parks.csv')
-    df_health = pd.read_csv('location_datasets/health.csv')
-    df_hotels = pd.read_csv('location_datasets/hotels.csv')
-    df_gasstations = pd.read_csv('location_datasets/gas_stations.csv')
-    df_autoparks = pd.read_csv('location_datasets/autoparks.csv')
+    df_touristic = pd.read_csv('datasets/location_datasets/touristics.csv')
+    df_parks = pd.read_csv('datasets/location_datasets/parks.csv')
+    df_health = pd.read_csv('datasets/location_datasets/health.csv')
+    df_hotels = pd.read_csv('datasets/location_datasets/hotels.csv')
+    df_gasstations = pd.read_csv('datasets/location_datasets/gas_stations.csv')
+    df_autoparks = pd.read_csv('datasets/location_datasets/autoparks.csv')
 
     df_touristic['Type'] = "Touristic"
     df_parks['Type'] = 'Park'
