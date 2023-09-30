@@ -52,7 +52,7 @@ with st.sidebar:
 
 if selected == "Summary":
 
-    data = pd.read_csv('final_traffic_data_C.csv')
+    data = pd.read_csv('datasets/final_traffic_data_C.csv')
 
     df = data.copy()
 
@@ -224,9 +224,9 @@ if selected == "Summary":
     st.title(f'Second Model (K = {3})')
     st.line_chart(elbow.k_scores_, width=500, use_container_width=True)
 
-    df_cluster_best_FM.to_csv("clustered_final.csv")
+    df_cluster_best_FM.to_csv("datasets/clustered_final.csv")
 
-    df = pd.read_csv('clustered_final.csv')
+    df = pd.read_csv('datasets/clustered_final.csv')
 
     cluster_lengths = df.groupby('cluster').size().reset_index(name='cluster_length')
 
@@ -249,8 +249,8 @@ if selected == "Summary":
 
 elif selected == 'Closest Locations':
 
-    df_touristic = pd.read_csv('datasets/location_datasets/touristics.csv')
-    
+    df_touristic = pd.read_csv('location_datasets/touristics.csv')
+
     df_touristic['LONGITUDE'] = df_touristic['LONGITUDE'].astype(float)
     df_touristic['LATITUDE'] = df_touristic['LATITUDE'].astype(float)
 

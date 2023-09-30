@@ -2,26 +2,32 @@
 ############################   MODEL CREATION   ###################################################
 ###################################################################################################
 
+import joblib
+import joblib
+import matplotlib.pyplot as plt
+
+plt.matplotlib.use('Qt5Agg')
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 import seaborn as sns
-import folium
-from sklearn.impute import SimpleImputer
+import streamlit as st
 from sklearn.cluster import KMeans
-from sklearn.decomposition import PCA
-from sklearn.preprocessing import RobustScaler
+from sklearn.preprocessing import LabelEncoder
 from sklearn.preprocessing import MinMaxScaler
 from yellowbrick.cluster import KElbowVisualizer
+import math
+from scipy.cluster.hierarchy import linkage
+from scipy.cluster.hierarchy import dendrogram
+import folium
 
 
 pd.set_option('display.max_columns', None)
-pd.set_option('display.max_rows', 20)
+pd.set_option('display.max_rows', 100)
 pd.set_option('display.width', 500)
 pd.set_option('display.expand_frame_repr', False)
 pd.set_option('display.float_format', lambda x: '%.5f' % x)
 
-data = pd.read_csv('final_traffic_data_C.csv')
+data = pd.read_csv('datasets/final_traffic_data_C.csv')
 
 df = data.copy()
 
@@ -121,8 +127,9 @@ data['cluster'].value_counts()
             #HEALTH_COUNT=('HEALTH_COUNT', 'mean'),
             #AUTOPARK_COUNT=('AUTOPARK_COUNT', 'mean')).reset_index()
 
-##############################
-#### SECOND MODEL ############
+###########################################
+################# SECOND MODEL ############
+###########################################
 
 df_cluster_5 = df[df['cluster'] == 4]
 
@@ -181,7 +188,7 @@ df_cluster_5["cluster"].value_counts()
             #AUTOPARK_COUNT=('AUTOPARK_COUNT', 'mean')).reset_index()
 
 
-df_cluster_5.to_csv("clustered_final.csv")
+df_cluster_5.to_csv("datasets/clustered_final.csv")
 
 ### CLUSTER VISUALIZATION ###
 
@@ -200,11 +207,12 @@ for index, row in df.iterrows():
         fill_color='blue'
     ).add_to(m)
 
-m.save('cluster_unknown.html')
+m.save('clusters/cluster_unknown.html')
 
 
-#############################
-### PCA #####################
+##########################################
+################ PCA #####################
+##########################################
 
 pca = PCA(n_components = 6)
 df_PCA = pca.fit_transform(scaled_data)
@@ -221,5 +229,183 @@ plt.xlabel('Number of Clusters')
 plt.ylabel('Cumulative Explained Variance')
 plt.show()
 
-# TODO: Model to be created.
+############################################
+######## Hierarchical clustering ###########
+############################################
+
+
+dff = pd.read_csv("datasets/final_traffic_data_C.csv")
+
+dff1 = dff.drop(columns=['GEOHASH', "Unnamed: 0"])
+
+
+from sklearn.impute import SimpleImputer
+
+dff1.replace([np.inf, -np.inf], np.nan, inplace=True)
+imputer = SimpleImputer(strategy='mean')
+df_model1 = imputer.fit_transform(dff1)
+
+df_model1 = pd.DataFrame(df_model1, columns=dff1.columns)
+
+
+###### Data Preprocessing & Feature Engineering ######
+
+cat_cols, num_cols, cat_but_car = grab_col_names(df_model1, cat_th=13, car_th=20)
+
+
+############################################
+########### Outlier Analaysis ##############
+############################################
+def outlier_thresholds(dataframe, variable, low_quantile=0.10, up_quantile=0.90):
+    quantile_one = dataframe[variable].quantile(low_quantile)
+    quantile_three = dataframe[variable].quantile(up_quantile)
+    interquantile_range = quantile_three - quantile_one
+    up_limit = quantile_three + 1.5 * interquantile_range
+    low_limit = quantile_one - 1.5 * interquantile_range
+    return low_limit, up_limit
+
+def check_outlier(dataframe, col_name):
+    low_limit, up_limit = outlier_thresholds(dataframe, col_name)
+    return dataframe[(dataframe[col_name] > up_limit) | (dataframe[col_name] < low_limit)].any(axis=None)
+
+
+for col in num_cols:
+    print(col, check_outlier(df_model1, col))
+
+def replace_with_thresholds(dataframe, variable):
+    low_limit, up_limit = outlier_thresholds(dataframe, variable)
+    dataframe.loc[(dataframe[variable] < low_limit), variable] = low_limit
+    dataframe.loc[(dataframe[variable] > up_limit), variable] = up_limit
+
+
+for col in num_cols:
+    replace_with_thresholds(df_model1, col)
+
+for col in num_cols:
+    print(col, check_outlier(df_model1, col))
+
+# df_model1 = df_model1.drop(columns=["LATITUDE", "LONGITUDE"])
+df_model1 = df_model1.drop(columns=["LATITUDE", "LONGITUDE"])
+
+
+######## Encoding ########
+def one_hot_encoder(dataframe, categorical_cols, drop_first=True):
+    dataframe = pd.get_dummies(dataframe, columns=categorical_cols, drop_first=drop_first)
+    return dataframe
+
+
+ohe_cols = [col for col in df_model1.columns if 30 >= df_model1[col].nunique() > 2]
+
+for col in ohe_cols:
+    df_model1 = one_hot_encoder(df_model1, [col])
+
+bool_cols = [col for col in df_model1.columns if df_model1[col].dtype == bool]
+
+for col in bool_cols:
+    df_model1[col] = df_model1[col].astype(int)
+
+for col in df_model1.columns:
+    if df_model1[col].isnull().any():
+        mean_value = df_model1[col].mean()
+        df_model1[col].fillna(mean_value, inplace=True)
+
+# df_model1 = df_model1.drop(columns=["LATITUDE", "LONGITUDE"])
+
+### SCALING ###
+
+from sklearn.preprocessing import RobustScaler
+
+scaler = RobustScaler()
+scaled_data = scaler.fit_transform(df_model1)
+
+############################################
+######## Hierarchical Clustering ###########
+############################################
+
+# df_model1
+
+hc_average = linkage(scaled_data, "complete")
+
+plt.figure(figsize=(7, 5))
+plt.title("Hierarchical Clustering Dendrogram")
+plt.xlabel("Observation Units")
+plt.ylabel("Distances")
+dendrogram(hc_average,
+           truncate_mode="lastp",
+           p=30,
+           show_contracted=True,
+           leaf_font_size=10)
+
+existing_labels = plt.yticks()[0]
+
+new_labels = [f"{i * 0.2:.1f}" for i in range(len(existing_labels))]
+
+plt.yticks(existing_labels, new_labels)
+
+plt.axhline(y=39, color='g', linestyle='--')
+
+plt.show()
+
+##############################################################
+######### Determining the Optimal Number of Clusters #########
+##############################################################
+
+plt.figure(figsize=(7, 5))
+plt.title("Hierarchical Clustering Dendrogram")
+plt.xlabel("Observation Units")
+plt.ylabel("Distances")
+
+dendrogram(hc_average,
+           leaf_font_size=10,
+           truncate_mode="lastp",
+           p=30,
+           show_contracted=True)
+
+plt.axhline(y=35, color='b', linestyle='--')
+
+plt.show()
+
+
+######################################
+####### Final Model Creation #########
+######################################
+
+scaler = RobustScaler()
+scaled_data = scaler.fit_transform(df_model1)
+model_df1 = pd.DataFrame(scaled_data, columns=df_model1.columns)
+model_df1.head()
+
+from sklearn.cluster import AgglomerativeClustering
+
+hc = AgglomerativeClustering(n_clusters=5, linkage="complete")
+segments = hc.fit_predict(model_df1)
+
+dff["HI_CLUSTER_NO"] = segments
+dff["HI_CLUSTER_NO"] = dff["HI_CLUSTER_NO"] + 1
+dff["HI_CLUSTER_NO"].value_counts()
+
+hi_cluster_4 = dff[dff["HI_CLUSTER_NO"] == 4]
+
+dff["HI_CLUSTER_NO"].value_counts()
+
+########################## MAP-Hierarchical ##########################
+
+hi_cluster_1 = dff[dff["HI_CLUSTER_NO"] == 1]
+hi_cluster_2 = dff[dff["HI_CLUSTER_NO"] == 2]
+hi_cluster_3 = dff[dff["HI_CLUSTER_NO"] == 3]
+hi_cluster_4 = dff[dff["HI_CLUSTER_NO"] == 4]
+hi_cluster_5 = dff[dff["HI_CLUSTER_NO"] == 5]
+
+m = folium.Map(location=[hi_cluster_4['LATITUDE'].mean(), hi_cluster_4['LONGITUDE'].mean()], zoom_start=10)
+
+for index, row in hi_cluster_4.iterrows():
+    folium.CircleMarker(
+        location=[row['LATITUDE'], row['LONGITUDE']],
+        radius=5,
+        color='blue',
+        fill=True,
+        fill_color='blue'
+    ).add_to(m)
+
+m.save('clusters/cluster_4.html')
 

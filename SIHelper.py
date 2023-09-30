@@ -4,8 +4,53 @@ import pandas as pd
 import geohash2
 
 class Abraham:
+    """
+    Class for processing and adding features to geospatial and temporal data.
+
+    Args:
+        interval (int): Time interval for distance calculations (default is 20).
+
+    Attributes:
+        interval (int): Time interval for distance calculations.
+        time_labels_N (list): Labels for time intervals (Daytime).
+        time_bins_N (list): Time bins for Daytime intervals.
+        time_labels_D (list): Labels for time intervals (Detailed).
+        time_bins_D (list): Time bins for Detailed time intervals.
+        school_break_periods (list): List of tuples representing school break periods.
+        public_holidays (list): List of public holidays.
+
+    Methods:
+        create_unique_coordinates_dataframe(dataframe):
+            Creates a DataFrame with unique geospatial coordinates.
+
+        calculate_distance(start_lat, start_lon, end_lat, end_lon):
+            Calculates the distance between two points on the Earth's surface.
+
+        add_distance_features(dataframe):
+            Adds distance-related features to the DataFrame.
+
+        add_time_features(dataframe):
+            Adds temporal features to the DataFrame.
+
+    """
 
     def __init__(self, interval=20):
+        """
+        Initializes an instance of the Abraham class.
+
+        Args:
+            interval (int, optional): Time interval for distance calculations (default is 20).
+
+        Attributes:
+            interval (int): Time interval for distance calculations.
+            time_labels_N (list): Labels for Daytime intervals.
+            time_bins_N (list): Time bins for Daytime intervals.
+            time_labels_D (list): Labels for Detailed time intervals.
+            time_bins_D (list): Time bins for Detailed time intervals.
+            school_break_periods (list): List of tuples representing school break periods.
+            public_holidays (list): List of public holidays.
+
+        """
         self.interval = interval
         self.time_labels_N = ['Late Night', 'Morning', 'Late Morning', 'Afternoon', 'Late Afternoon', 'Evening',
                               'Night']
@@ -34,6 +79,16 @@ class Abraham:
         ]
 
     def create_unique_coordinates_dataframe(self, dataframe):
+        """
+        Creates a DataFrame with unique geospatial coordinates.
+
+        Args:
+            dataframe (pd.DataFrame): Input DataFrame with geospatial information.
+
+        Returns:
+            pd.DataFrame: A DataFrame with unique geospatial coordinates.
+
+        """
         unique_coordinates_dataframe = dataframe.drop_duplicates(subset='GEOHASH')
 
         unique_geohash = unique_coordinates_dataframe['GEOHASH'].tolist()
@@ -45,6 +100,39 @@ class Abraham:
         return dataframe
 
     def calculate_distance(self, start_lat, start_lon, end_lat, end_lon):
+        """
+        Calculates the distance between two points on the Earth's surface using the Haversine formula.
+
+        Args:
+            start_lat (float): Latitude of the starting point in degrees.
+            start_lon (float): Longitude of the starting point in degrees.
+            end_lat (float): Latitude of the ending point in degrees.
+            end_lon (float): Longitude of the ending point in degrees.
+
+        Returns:
+            float: The calculated distance in kilometers.
+
+        Constants:
+            R (float): Radius of the Earth in kilometers.
+
+        Formula:
+            The Haversine formula is used to calculate the distance:
+
+            delta_latitude = math.radians(end_lat - start_lat)
+            delta_longitude = math.radians(end_lon - start_lon)
+
+            a = math.sin(delta_latitude / 2) ** 2 +
+                math.cos(math.radians(start_lat)) * math.cos(math.radians(end_lat)) *
+                math.sin(delta_longitude / 2) ** 2
+
+            c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+            distance = R * c
+
+        Note:
+            - The radius of the Earth (R) is assumed to be approximately 6371 kilometers.
+
+        """
         R = 6371
         delta_latitude = math.radians(end_lat - start_lat)
         delta_longitude = math.radians(end_lon - start_lon)
@@ -56,6 +144,25 @@ class Abraham:
 
 
     def add_distance_features(self, dataframe):
+        """
+        Adds distance-related features to the DataFrame.
+
+        Args:
+            dataframe (pd.DataFrame): Input DataFrame with geospatial information.
+
+        Returns:
+            pd.DataFrame: DataFrame with added distance features.
+
+        Calculated Features:
+            - 'START_LAT': Latitude of the starting point.
+            - 'START_LON': Longitude of the starting point.
+            - 'END_LAT': Latitude of the ending point (shifted).
+            - 'END_LON': Longitude of the ending point (shifted).
+            - 'DISTANCE_KM': Distance in kilometers between starting and ending points.
+            - 'DISTANCE_INTERVAL': Distance rounded to the nearest interval.
+            - 'TRAFFIC_DENSITY': Traffic density based on the number of vehicles, distance, and average speed.
+
+        """
         dataframe['START_LAT'] = dataframe['LATITUDE']
         dataframe['START_LON'] = dataframe['LONGITUDE']
         dataframe['END_LAT'] = dataframe['LATITUDE'].shift(-1)
@@ -73,6 +180,32 @@ class Abraham:
         return dataframe
 
     def add_time_features(self, dataframe):
+        """
+        Adds temporal features to the DataFrame.
+
+        Args:
+            dataframe (pd.DataFrame): Input DataFrame with temporal information.
+
+        Returns:
+            pd.DataFrame: DataFrame with added temporal features.
+
+        Calculated Features:
+            - 'DATE_TIME': Conversion of the 'DATE_TIME' column to datetime format.
+            - 'HOUR_N': Extracted hour from the datetime (24-hour format).
+            - 'HOUR_D': Detailed time information based on the datetime.
+            - 'DAY': Name of the day.
+            - 'DAY_NUMBER': Day of the month.
+            - 'WEEK': Week number.
+            - 'MONTH': Month name.
+            - 'YEAR': Year.
+            - 'SEASON': Season based on the month.
+            - 'DAY_INTERVAL': Weekdays or Weekends.
+            - 'TIME_INTERVAL_N': Categorized time interval (Daytime).
+            - 'TIME_INTERVAL_D': Detailed categorized time interval.
+            - 'BREAK_PERIOD': School break period.
+            - 'PUBLIC_HOLIDAY': Whether it's a public holiday or not.
+
+        """
         dataframe['DATE_TIME'] = pd.to_datetime(dataframe['DATE_TIME'])
 
         dataframe['HOUR_N'] = dataframe['DATE_TIME'].dt.hour
@@ -207,7 +340,8 @@ class Jerzy:
 
         result_df = self.dataframe.groupby(['GEOHASH']).agg(
             AVG_NUM_VEHICLES_HOURLY=('NUMBER_OF_VEHICLES', 'mean'),
-            TOTAL_NUM_VEHICLES_HOURLY=('NUMBER_OF_VEHICLES', 'sum')).reset_index()
+            TOTAL_NUM_VEHICLES_HOURLY=('NUMBER_OF_VEHICLES', 'sum'),
+            AVG_TRAFFIC_DENSITY_HOURLY=('TRAFFIC_DENSITY', 'mean')).reset_index()
         return result_df
 
     def find_custom_statistics(self, group_column):
@@ -231,9 +365,10 @@ class Jerzy:
 
         result_df = self.dataframe.groupby(['GEOHASH', group_column]).agg(
             AVG_NUM_VEHICLES=('NUMBER_OF_VEHICLES', 'mean'),
-            TOTAL_NUM_VEHICLES=('NUMBER_OF_VEHICLES', 'sum')).reset_index()
+            TOTAL_NUM_VEHICLES=('NUMBER_OF_VEHICLES', 'sum'),
+            AVG_TRAFFIC_DENSITY=('TRAFFIC_DENSITY', 'mean')).reset_index()
         result_df.columns = ['GEOHASH', f'{group_column}', f'AVG_NUM_VEHICLES_{group_column}',
-                            f'TOTAL_NUM_VEHICLES_{group_column}']
+                            f'TOTAL_NUM_VEHICLES_{group_column}', f'AVG_TRAFFIC_DENSITY_{group_column}']
         return result_df
 
     def find_custom_statistics_C(self, group_column):
@@ -256,7 +391,8 @@ class Jerzy:
 
         result_df = self.dataframe.groupby(['GEOHASH', group_column]).agg(
             AVG_NUM_VEHICLES=('NUMBER_OF_VEHICLES', 'mean'),
-            TOTAL_NUM_VEHICLES=('NUMBER_OF_VEHICLES', 'sum')).reset_index()
+            TOTAL_NUM_VEHICLES=('NUMBER_OF_VEHICLES', 'sum'),
+            AVG_TRAFFIC_DENSITY=('TRAFFIC_DENSITY', 'mean')).reset_index()
         if group_column == 'MONTH':
             result_df[group_column] = pd.Categorical(result_df[group_column], categories=self.custom_month_order,
                                                      ordered=True)
@@ -275,15 +411,43 @@ class Jerzy:
                                        values='AVG_NUM_VEHICLES').reset_index()
         total_df = result_df.pivot(index='GEOHASH', columns=group_column,
                                          values='TOTAL_NUM_VEHICLES').reset_index()
+        density_df = result_df.pivot(index='GEOHASH', columns=group_column,
+                                         values='AVG_TRAFFIC_DENSITY').reset_index()
         avg_df.columns = [f'AVG_NUM_VEHICLES_{group_column}_{col}' if col != 'GEOHASH'
                                 else col for col in avg_df.columns]
         total_df.columns = [f'TOTAL_NUM_VEHICLES_{group_column}_{col}' if col != 'GEOHASH'
                                   else col for col in total_df.columns]
-        result_df = avg_df.merge(total_df, on=['GEOHASH'])
+        density_df.columns = [f'AVG_TRAFFIC_DENSITY{group_column}_{col}' if col != 'GEOHASH'
+                                  else col for col in total_df.columns]
+        result_df = avg_df.merge(total_df, on=['GEOHASH']).merge(density_df, on=['GEOHASH'])
         return result_df
 
 class Marco:
+    """
+    Class for processing geospatial data.
+
+    Methods:
+        find_lon_lan_dataframe(dataframe):
+            Finds geohash values for latitude and longitude coordinates.
+
+        haversine(latitude1, longitude1, latitude2, longitude2):
+            Calculates the distance between two points on the Earth's surface using the Haversine formula.
+
+        count_places_near_traffic(place_dataframe, final_dataframe):
+            Counts the number of places near traffic points within a specified radius.
+
+    """
     def find_lon_lan_dataframe(self, dataframe):
+        """
+        Finds geohash values for latitude and longitude coordinates in the DataFrame.
+
+        Args:
+            dataframe (pd.DataFrame): Input DataFrame with 'LATITUDE' and 'LONGITUDE' columns.
+
+        Returns:
+            pd.DataFrame: DataFrame with an added 'GEOHASH' column containing geohash values.
+
+        """
         latitude = dataframe["LATITUDE"]
         longitude = dataframe["LONGITUDE"]
 
@@ -300,6 +464,36 @@ class Marco:
         return dataframe
 
     def haversine(self, latitude1, longitude1, latitude2, longitude2):
+        """
+        Calculates the distance between two points on the Earth's surface using the Haversine formula.
+
+        Args:
+            latitude1 (float): Latitude of the first point.
+            longitude1 (float): Longitude of the first point.
+            latitude2 (float): Latitude of the second point.
+            longitude2 (float): Longitude of the second point.
+
+        Returns:
+            float: The calculated distance in kilometers.
+
+        Constants:
+            R (float): Radius of the Earth in kilometers.
+
+        Formula:
+            The Haversine formula is used to calculate the distance:
+
+            dlat = latitude2 - latitude1
+            dlon = longitude2 - longitude1
+
+            a = sin(dlat / 2) ** 2 + cos(latitude1) * cos(latitude2) * sin(dlon / 2) ** 2
+            c = 2 * atan2(sqrt(a), sqrt(1 - a))
+
+            distance = R * c
+
+        Note:
+            - The radius of the Earth (R) is assumed to be approximately 6371 kilometers.
+
+        """
         R = 6371
 
         latitude1, longitude1, latitude2, longitude2 = map(float, [latitude1, longitude1, latitude2, longitude2])
@@ -315,6 +509,17 @@ class Marco:
         return R * c
 
     def count_places_near_traffic(self, place_dataframe, final_dataframe):
+        """
+        Counts the number of places near traffic points within a specified radius.
+
+        Args:
+            place_dataframe (pd.DataFrame): DataFrame containing geohash values for places.
+            final_dataframe (pd.DataFrame): DataFrame containing geohash values for traffic points.
+
+        Returns:
+            dict: A dictionary mapping traffic geohash codes to the count of nearby places.
+
+        """
 
         place_g_list = place_dataframe["GEOHASH"].tolist()
         final_g_list = final_dataframe["GEOHASH"].tolist()
